@@ -33,6 +33,7 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MerchantRecipe;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -99,7 +100,7 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
             Villager getMyBoi = (Villager) event.getRightClicked();
             if(villagers.contains(getMyBoi)) {
                 shopGui(p);
-            } else Bukkit.broadcastMessage("nope");
+            }
         }
     }
 
@@ -107,6 +108,13 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
     public void onInventoryClick(InventoryClickEvent event) {
         Player p = (Player) event.getWhoClicked();
         if(!MatchUtil.determineMatchCorrespondence(p, this.match)) return;
+        if(event.getInventory().equals(p.getInventory())) {
+            // disable armor interaction
+            if(event.getSlot() >= 100 && event.getSlot() <= 103) {
+                event.setCancelled(true);
+                return;
+            }
+        }
         if(event.getInventory().getName().equalsIgnoreCase(shopName)) {
             event.setCancelled(true);
             shopHandle(p, event.getCurrentItem(), event.getSlot());
@@ -114,22 +122,54 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
     }
 
     private void shopHandle(Player p, ItemStack clickedItem, int clickedSlot) {
+        if(clickedSlot >= 0 && clickedSlot <= 8) {
+            guiNavigate(clickedSlot);
+            return;
+        }
         BWUserData candidate = getBWUserDataByPlayer(p);
         if(candidate == null) return;
         BWShopItem contained = candidate.getBwShopIndex().getShopIndex().get(clickedSlot);
         if(contained == null) return;
         if(meetsShopReq(p, contained.getCostMaterial())) {
+            if(contained.getBwLevelable() != null && contained.getBwLevelable().getLevelType() == BWLevelable.BWLevel.ARMOR) {
+                if(candidate.getLevelContainer().getLevels().get(BWLevelable.BWLevel.ARMOR) >= contained.getBwLevelable().getMagnitude()) {
+                    p.sendMessage(ChatColor.RED + "You don't need this!");
+                    PlayerUtil.playSound(p, Sound.ENTITY_ENDERMEN_TELEPORT, 0.5F);
+                    p.closeInventory();
+                    return;
+                }
+                PlayerUtil.equipPlayerWith(p, exchangeArmorLevel(contained.getBwLevelable().getMagnitude()), candidate.getPlayerColor());
+            } else p.getInventory().addItem(contained.getItem());
+            PlayerUtil.removeItems(p.getInventory(), contained.getCostMaterial().getType(), contained.getCostMaterial().getAmount());
+            if(contained.getBwLevelable() != null) handleLevelChange(contained.getBwLevelable(), candidate);
             PlayerUtil.playSound(p, Sound.ENTITY_PLAYER_LEVELUP, 1.5F);
-
-            int firstInst = p.getInventory().first(contained.getCostMaterial().getType());
-            p.getInventory().getItem(firstInst).setAmount(p.getInventory().getItem(firstInst).getAmount() - contained.getCostMaterial().getAmount());
-            p.getInventory().addItem(contained.getItem());
-
             p.updateInventory();
         } else {
             p.sendMessage(ChatColor.RED + "You don't have enough materials to purchase this!");
             PlayerUtil.playSound(p, Sound.ENTITY_ENDERMEN_TELEPORT, 0.5F);
         }
+    }
+
+    private String exchangeArmorLevel(int level) {
+        switch (level) {
+            case 3:
+                return "diamond";
+            case 2:
+                return "iron";
+            case 1:
+                return "chainmail";
+            default:
+                return "leather";
+        }
+    }
+
+    private void handleLevelChange(BWLevelable levelable, BWUserData data) {
+        if(levelable.getMagnitude() > data.getLevelContainer().getLevels().get(levelable.getLevelType())) data.getLevelContainer().getLevels().put(levelable.getLevelType(), levelable.getMagnitude());
+        data.refreshIdealDefaults();
+    }
+
+    private void guiNavigate(int clickedSlot) {
+
     }
 
     private boolean meetsShopReq(Player p, ItemStack coster) {
@@ -146,20 +186,26 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
     private void populateGui(Inventory yee, Player p, int pageNumber) {
         BWUserData candidate = findUserDataByPlayer(p);
         if(candidate == null) return;
+        candidate.getBwShopIndex().updateIndex();
         candidate.getBwShopIndex().applyIndexToInventory(yee, pageNumber);
-        populateGuiWithDefaults(yee);
+        populateGuiWithDefaults(yee, pageNumber);
     }
 
-    private void populateGuiWithDefaults(Inventory yee) {
+    private void populateGuiWithDefaults(Inventory yee, int pageNumber) {
         ItemStack someglazz = new ItemStack(Material.STAINED_GLASS_PANE, 1, (short) 15);
         ItemMeta detail = someglazz.getItemMeta();
-        detail.setDisplayName("");
+        detail.setDisplayName(ChatColor.RESET + "");
         for(int x = 9; x <= 17; x++) yee.setItem(x, someglazz);
+        yee.setItem(pageNumber + 9, new ItemStack(Material.STAINED_GLASS_PANE, 1, (short) 13));
+        yee.setItem(0, ItemUtil.createItem(Material.NETHER_STAR, ChatColor.YELLOW + "Quick Buy", Collections.singletonList(ChatColor.GRAY + "Buy " + ChatColor.AQUA + "convenient items" + ChatColor.GRAY + " here!")));
         yee.setItem(1, ItemUtil.createItem(Material.HARD_CLAY, ChatColor.YELLOW + "Building Blocks", Collections.singletonList(ChatColor.GRAY + "Buy " + ChatColor.GREEN + "blocks " + ChatColor.GRAY + "here!")));
-        yee.setItem(2, ItemUtil.createItem(Material.WOOD_SWORD, ChatColor.YELLOW + "Weaponry", Collections.singletonList(ChatColor.GRAY + "Purchase some fine " + ChatColor.AQUA + "weapons")));
-        yee.setItem(3, ItemUtil.createItem(Material.STONE_PICKAXE, ChatColor.YELLOW + "Tools", Collections.singletonList(ChatColor.GOLD + "Tools " + ChatColor.GRAY + "can be found here")));
-        yee.setItem(4, ItemUtil.createItem(Material.TNT, ChatColor.YELLOW + "Special Items", Collections.singletonList(ChatColor.GRAY + "They had nowhere else to go")));
-        yee.setItem(5, ItemUtil.createItem(Material.DIAMOND, ChatColor.YELLOW + "Team Upgrades", Collections.singletonList(ChatColor.GRAY + "Buy " + ChatColor.GOLD + "team upgrades" + ChatColor.GRAY + " here")));
+        yee.setItem(2, ItemUtil.createItem(Material.GOLD_SWORD, ChatColor.YELLOW + "Weaponry", Collections.singletonList(ChatColor.GRAY + "Purchase some fine " + ChatColor.AQUA + "weapons")));
+        yee.setItem(3, ItemUtil.createItem(Material.CHAINMAIL_BOOTS, ChatColor.YELLOW + "Armor", Collections.singletonList(ChatColor.GRAY + "Purchase " + ChatColor.AQUA + "armor" + ChatColor.GRAY + " here")));
+        yee.setItem(4, ItemUtil.createItem(Material.STONE_PICKAXE, ChatColor.YELLOW + "Tools", Collections.singletonList(ChatColor.GOLD + "Tools " + ChatColor.GRAY + "can be found here")));
+        yee.setItem(5, ItemUtil.createItem(Material.BOW, ChatColor.YELLOW + "Projectiles", Collections.singletonList(ChatColor.GOLD + "Shoot 'em all")));
+        yee.setItem(6, ItemUtil.createItem(Material.BREWING_STAND_ITEM, ChatColor.YELLOW + "Potions", Collections.singletonList(ChatColor.GREEN + "Dope")));
+        yee.setItem(7, ItemUtil.createItem(Material.TNT, ChatColor.YELLOW + "Special Items", Collections.singletonList(ChatColor.GRAY + "They had nowhere else to go")));
+        yee.setItem(8, ItemUtil.createItem(Material.DIAMOND, ChatColor.YELLOW + "Team Upgrades", Collections.singletonList(ChatColor.GRAY + "Buy " + ChatColor.GOLD + "team upgrades" + ChatColor.GRAY + " here")));
     }
 
     @Override

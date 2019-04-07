@@ -95,7 +95,7 @@ public class TrafficManager implements Listener {
         for(Match match : matches) {
             if(match == null) continue;
             int matchQueueSize = match.getMatchInfo().getQueuedPlayers().size();
-            if(matchQueueSize > highest && match.getStatus() == GameStatus.PRE && match.getMatchInfo().getGameType() == gameType) {
+            if(matchQueueSize > highest && (match.getStatus() == GameStatus.PRE || match.getStatus() == GameStatus.QUEUE) && match.getMatchInfo().getGameType() == gameType) {
                 highest = matchQueueSize;
                 candidate = match;
             }
