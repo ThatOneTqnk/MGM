@@ -3,13 +3,17 @@ package me.tqnk.bw.modules.bw;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import me.tqnk.bw.MGM;
+import me.tqnk.bw.events.MatchQuitEvent;
+import me.tqnk.bw.game.GameType;
 import me.tqnk.bw.game.MatchModule;
 import me.tqnk.bw.match.Match;
+import me.tqnk.bw.modules.bw.generator.BWGenerator;
 import me.tqnk.bw.modules.periodical.Periodical;
 import me.tqnk.bw.modules.scoreboard.ScoreboardManagerModule;
 import me.tqnk.bw.modules.team.MatchTeam;
 import me.tqnk.bw.modules.team.TeamManagerModule;
 import me.tqnk.bw.status.GameStatus;
+import me.tqnk.bw.user.PlayerContext;
 import me.tqnk.bw.user.PlayerManager;
 import me.tqnk.bw.util.ItemUtil;
 import me.tqnk.bw.util.MatchUtil;
@@ -33,7 +37,6 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MerchantRecipe;
-import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -41,16 +44,21 @@ import org.bukkit.potion.PotionEffectType;
 import java.util.*;
 
 public class BedwarsModule extends MatchModule implements Listener, Periodical {
+    // Info related to the core of the Match (Regardless of GameType)
     private ScoreboardManagerModule scoreboardManagerModule;
     private TeamManagerModule teamManagerModule;
     private PlayerManager playerManager;
     private Match match;
+
+    // BW Match Unique Data for players and teams
     private HashMap<MatchTeam, BWTeamInfo> teamInfoLink = new HashMap<>();
     private List<BWUserData> bwUserData = new ArrayList<>();
+
+    // BW Match Unique Data for locations and misc
     private List<Block> blocksPlaced = new ArrayList<>();
     private List<Location> shopVillagerLocs = new ArrayList<>();
     private List<Villager> villagers = new ArrayList<>();
-    private HashMap<MatchTeam, Location> bedLocs = new HashMap<>();
+    private List<BWGenerator> generators = new ArrayList<>();
     private String shopName = ChatColor.GOLD + "Shop";
 
     @Override
@@ -63,17 +71,48 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
         initializeNPCs();
     }
 
+    @EventHandler
+    public void onMatchQuit(MatchQuitEvent event) {
+        PlayerContext ctx = event.getLeaver();
+        if(ctx == null || !MatchUtil.determineMatchCorrespondence(ctx.getHost(), this.match) || ctx.getInGame().getMatchInfo().getGameType() != GameType.BEDWARS) return;
+        endMeNow(ctx);
+        MatchUtil.removeFromAll(ctx);
+        pingTeams();
+    }
+
+    private void endMeNow(PlayerContext ctx) {
+        ctx.getInTeam().remove(ctx.getHost());
+        for(int x = 0; x < bwUserData.size(); x++) if(bwUserData.get(x).getPlayer() == ctx.getHost()) bwUserData.remove(x);
+    }
+
+    private void pingTeams() {
+        for(Map.Entry<MatchTeam, BWTeamInfo> entry : teamInfoLink.entrySet()) {
+            if(entry.getValue().getBwTeamStatus() == BWTeamStatus.NORESPAWN && entry.getKey().getPlayers().size() == 0) {
+                MatchUtil.sendToQueued(this.match, new String[] {"", ChatColor.WHITE + "" + ChatColor.BOLD + entry.getKey().getChatTeamColor() + "" + entry.getKey().getDisplayName() + ChatColor.RESET + "" + ChatColor.WHITE + " team has been eliminated!", ""});
+                entry.getValue().setBwTeamStatus(BWTeamStatus.DEAD);
+            }
+        }
+    }
+
     private void parseRemainderJson(JsonElement elem, World world) {
         JsonObject rawData = elem.getAsJsonObject();
         if(rawData.has("teams")) {
             for(JsonElement teamElement : rawData.getAsJsonArray("teams")) {
                 JsonObject teamJson = teamElement.getAsJsonObject();
                 Location bedLoc = Parser.convertLocation(world, teamJson.get("bed"));
-                bedLocs.put(teamManagerModule.getMatchTeamById(teamJson.get("id").getAsString()), bedLoc);
+                teamInfoLink.put(teamManagerModule.getMatchTeamById(teamJson.get("id").getAsString()), new BWTeamInfo(bedLoc));
             }
         }
         if(rawData.has("shops")) {
             for(JsonElement loc : rawData.getAsJsonArray("shops")) shopVillagerLocs.add(Parser.convertLocation(world, loc));
+        }
+        if(rawData.has("generators")) {
+            for(JsonElement gen : rawData.getAsJsonArray("generators")) {
+                JsonObject genData = gen.getAsJsonObject();
+                String genType = genData.get("type").getAsString();
+                JsonElement genLoc = genData.get("location");
+                generators.add(new BWGenerator(BWGenerator.BWGenType.valueOf(genType.toUpperCase()), Parser.convertLocation(world, genLoc)));
+            }
         }
     }
 
@@ -108,29 +147,49 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
     public void onInventoryClick(InventoryClickEvent event) {
         Player p = (Player) event.getWhoClicked();
         if(!MatchUtil.determineMatchCorrespondence(p, this.match)) return;
-        if(event.getInventory().equals(p.getInventory())) {
+        if(event.getClickedInventory().equals(p.getInventory())) {
             // disable armor interaction
             if(event.getSlot() >= 100 && event.getSlot() <= 103) {
                 event.setCancelled(true);
                 return;
             }
         }
-        if(event.getInventory().getName().equalsIgnoreCase(shopName)) {
+        if(event.getClickedInventory().getName().equalsIgnoreCase(shopName)) {
             event.setCancelled(true);
-            shopHandle(p, event.getCurrentItem(), event.getSlot());
+            shopHandle(event.getClickedInventory(), p, event.getCurrentItem(), event.getSlot());
         }
     }
 
-    private void shopHandle(Player p, ItemStack clickedItem, int clickedSlot) {
+    private void shopHandle(Inventory inv, Player p, ItemStack clickedItem, int clickedSlot) {
         if(clickedSlot >= 0 && clickedSlot <= 8) {
-            guiNavigate(clickedSlot);
+            guiNavigate(inv, clickedSlot, p);
             return;
         }
         BWUserData candidate = getBWUserDataByPlayer(p);
         if(candidate == null) return;
-        BWShopItem contained = candidate.getBwShopIndex().getShopIndex().get(clickedSlot);
+        BWShopItem contained = candidate.getBwShopIndex().getShopIndex().get(clickedSlot + (candidate.getBwShopIndex().getCurrentPage() * 54));
         if(contained == null) return;
         if(meetsShopReq(p, contained.getCostMaterial())) {
+            if(contained.getBwLevelable() != null && contained.getBwLevelable().getMagnitude() <= candidate.getLevelContainer().getLevels().get(contained.getBwLevelable().getLevelType())) {
+                p.sendMessage(ChatColor.RED + "You don't really need this");
+                PlayerUtil.playSound(p, Sound.ENTITY_ENDERMEN_TELEPORT, 0.5F);
+                return;
+            }
+            if(contained.getBwLevelable() != null && (contained.getBwLevelable().getLevelType() == BWLevelable.BWLevel.AXE || contained.getBwLevelable().getLevelType() == BWLevelable.BWLevel.PICKAXE)) {
+               if(contained.getBwLevelable().getLevelType() == BWLevelable.BWLevel.AXE) {
+                   p.getInventory().remove(Material.WOOD_AXE);
+                   p.getInventory().remove(Material.STONE_AXE);
+                   p.getInventory().remove(Material.GOLD_AXE);
+                   p.getInventory().remove(Material.IRON_AXE);
+                   p.getInventory().remove(Material.DIAMOND_AXE);
+               } else {
+                   p.getInventory().remove(Material.WOOD_PICKAXE);
+                   p.getInventory().remove(Material.STONE_PICKAXE);
+                   p.getInventory().remove(Material.GOLD_PICKAXE);
+                   p.getInventory().remove(Material.IRON_PICKAXE);
+                   p.getInventory().remove(Material.DIAMOND_PICKAXE);
+               }
+            }
             if(contained.getBwLevelable() != null && contained.getBwLevelable().getLevelType() == BWLevelable.BWLevel.ARMOR) {
                 if(candidate.getLevelContainer().getLevels().get(BWLevelable.BWLevel.ARMOR) >= contained.getBwLevelable().getMagnitude()) {
                     p.sendMessage(ChatColor.RED + "You don't need this!");
@@ -142,6 +201,10 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
             } else p.getInventory().addItem(contained.getItem());
             PlayerUtil.removeItems(p.getInventory(), contained.getCostMaterial().getType(), contained.getCostMaterial().getAmount());
             if(contained.getBwLevelable() != null) handleLevelChange(contained.getBwLevelable(), candidate);
+            if(contained.getBwLevelable() != null && (contained.getBwLevelable().getLevelType() == BWLevelable.BWLevel.AXE || contained.getBwLevelable().getLevelType() == BWLevelable.BWLevel.PICKAXE)) {
+                candidate.getBwShopIndex().updateIndex();
+                candidate.getBwShopIndex().applyIndexToInventory(inv, candidate.getBwShopIndex().getCurrentPage());
+            }
             PlayerUtil.playSound(p, Sound.ENTITY_PLAYER_LEVELUP, 1.5F);
             p.updateInventory();
         } else {
@@ -168,8 +231,8 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
         data.refreshIdealDefaults();
     }
 
-    private void guiNavigate(int clickedSlot) {
-
+    private void guiNavigate(Inventory inv, int clickedSlot, Player p) {
+        populateGui(inv, p, clickedSlot);
     }
 
     private boolean meetsShopReq(Player p, ItemStack coster) {
@@ -186,6 +249,7 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
     private void populateGui(Inventory yee, Player p, int pageNumber) {
         BWUserData candidate = findUserDataByPlayer(p);
         if(candidate == null) return;
+        candidate.getBwShopIndex().setCurrentPage(pageNumber);
         candidate.getBwShopIndex().updateIndex();
         candidate.getBwShopIndex().applyIndexToInventory(yee, pageNumber);
         populateGuiWithDefaults(yee, pageNumber);
@@ -220,7 +284,7 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
         teamManagerModule.sendAllTeamsToTheirSpawn();
         for(MatchTeam team : teamManagerModule.getAllTeams()) {
             BWTeamStatus status = (team.getPlayers().size() > 0) ? BWTeamStatus.ALIVE : BWTeamStatus.DEAD;
-            teamInfoLink.put(team, new BWTeamInfo(bedLocs.get(team), status));
+            teamInfoLink.get(team).setBwTeamStatus(status);
         }
         for(Player p : match.getMatchInfo().getQueuedPlayers()) {
             PlayerUtil.generalReadyPlayer(p, GameMode.SURVIVAL);
@@ -263,6 +327,21 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
         if(!blocksPlaced.contains(event.getBlock())) blocksPlaced.add(event.getBlock());
     }
 
+    private void breakBed(Player p, MatchTeam team) {
+        BWTeamInfo teamInfo = teamInfoLink.get(team);
+        PlayerContext ctx = playerManager.getPlayerContext(p);
+        if(teamInfo == null || ctx == null || ctx.getInTeam() == null || teamInfo.getBwTeamStatus().getAliveOrder() <= 1) return;
+        MatchTeam coolerTeam = ctx.getInTeam();
+        String brokeBed = ChatColor.WHITE.toString() + ChatColor.BOLD + "> " + coolerTeam.getChatTeamColor() + p.getName() + ChatColor.GRAY + " destroyed " + team.getChatTeamColor() + team.getDisplayName() + ChatColor.GRAY + "'s bed!";
+        for(Player playa : match.getMatchInfo().getQueuedPlayers()) {
+            playa.sendMessage("");
+            playa.sendMessage(brokeBed);
+            playa.sendMessage("");
+        }
+        MatchUtil.playToQueued(match, Sound.ENTITY_ENDERDRAGON_GROWL, 1F);
+        teamInfo.setBwTeamStatus(BWTeamStatus.NORESPAWN);
+    }
+
     @EventHandler
     public void onBreak(BlockBreakEvent event) {
         Player p = event.getPlayer();
@@ -274,7 +353,7 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
                 p.sendMessage(ChatColor.RED + "You cannot break your own bed!");
                 event.setCancelled(true);
             } else {
-                p.sendMessage("congrats you broke someone elses bed");
+                breakBed(p, whoseBed);
                 event.setDropItems(false);
             }
             return;
@@ -294,7 +373,7 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
 
     // using radius because laziness
     private MatchTeam whoseBedIsThat(Location location) {
-        for (Map.Entry<MatchTeam, Location> entry : bedLocs.entrySet()) if(location.distance(entry.getValue()) <= 5) return entry.getKey();
+        for(Map.Entry<MatchTeam, BWTeamInfo> entry : teamInfoLink.entrySet()) if(location.distance(entry.getValue().getBedLocation()) <= 5) return entry.getKey();
         return null;
     }
 

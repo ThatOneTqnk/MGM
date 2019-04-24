@@ -3,6 +3,7 @@ package me.tqnk.bw.traffic;
 import lombok.Getter;
 import me.tqnk.bw.MGM;
 import me.tqnk.bw.events.MatchQueueRequestEvent;
+import me.tqnk.bw.events.MatchQuitEvent;
 import me.tqnk.bw.events.MatchStartEvent;
 import me.tqnk.bw.game.GameType;
 import me.tqnk.bw.game.MatchModule;
@@ -18,6 +19,7 @@ import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
 import java.util.List;
@@ -25,6 +27,7 @@ import java.util.List;
 public class TrafficManager implements Listener {
     /*
         TrafficManager handles events on behalf of multiple matches
+        and emits custom events
      */
     @Getter private int runnableId = -1;
 
@@ -71,6 +74,13 @@ public class TrafficManager implements Listener {
     @EventHandler
     public void onMatchStart(MatchStartEvent event) {
         for(MatchModule module : event.getHostMatch().getMatchInfo().getModules()) module.start();
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        PlayerContext ctx = MGM.get().getPlayerManager().getPlayerContext(event.getPlayer());
+        if(ctx == null) return;
+        Bukkit.getPluginManager().callEvent(new MatchQuitEvent(ctx));
     }
 
     private static void addPlayerToQueue(Match match, Player target) {

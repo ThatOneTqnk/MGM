@@ -9,6 +9,6 @@ public class BWLevelable {
     private int magnitude;
 
     enum BWLevel {
-        PICKAXE, AXE, ARMOR, SWORD;
+        PICKAXE, AXE, ARMOR, SWORD, SHEARS;
     }
 }

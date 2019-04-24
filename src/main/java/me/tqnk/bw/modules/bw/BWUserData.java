@@ -6,6 +6,7 @@ import me.tqnk.bw.util.ItemUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.Material;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
@@ -38,12 +39,40 @@ public class BWUserData {
     public void refreshIdealDefaults() {
         this.idealItems.clear();
         staticIdealDefaults(this.idealItems);
+
         int swordLevel = levelContainer.getLevels().get(BWLevelable.BWLevel.SWORD);
         ItemStack swordReceive = ItemUtil.createItem(Material.WOOD_SWORD, ChatColor.GRAY + "Wooden Sword");
         if(swordLevel == 1) swordReceive = ItemUtil.createItem(Material.STONE_SWORD, ChatColor.GRAY + "Stone Sword");
         else if(swordLevel == 2) swordReceive = ItemUtil.createItem(Material.GOLD_SWORD, ChatColor.GRAY + "Golden Sword");
         else if(swordLevel == 3) swordReceive = ItemUtil.createItem(Material.IRON_SWORD, ChatColor.GRAY + "Iron Sword");
         this.idealItems.put(0, swordReceive);
+
+        int pickLevel = levelContainer.getLevels().get(BWLevelable.BWLevel.PICKAXE);
+        ItemStack pickReceive = null;
+        if(pickLevel == 1) pickReceive = ItemUtil.createItem(Material.WOOD_PICKAXE, ChatColor.GRAY + "Wooden Pickaxe");
+        else if(pickLevel == 2) pickReceive = ItemUtil.createItem(Material.STONE_PICKAXE, ChatColor.GRAY + "Stone Pickaxe");
+        else if(swordLevel == 3) pickReceive = ItemUtil.createItem(Material.IRON_PICKAXE, ChatColor.GRAY + "Iron Pickaxe");
+        else if(swordLevel == 4) pickReceive = ItemUtil.createItem(Material.DIAMOND_PICKAXE, ChatColor.GRAY + "Diamond Pickaxe");
+        if(pickReceive != null) {
+            pickReceive.addEnchantment(Enchantment.DIG_SPEED, 1);
+            this.idealItems.put(1, pickReceive);
+        }
+
+        int axeLevel = levelContainer.getLevels().get(BWLevelable.BWLevel.AXE);
+        ItemStack axeReceive = null;
+        if(axeLevel == 1) axeReceive = ItemUtil.createItem(Material.WOOD_AXE, ChatColor.GRAY + "Wooden Axe");
+        else if(axeLevel == 2) axeReceive = ItemUtil.createItem(Material.STONE_AXE, ChatColor.GRAY + "Stone Axe");
+        else if(axeLevel == 3) axeReceive = ItemUtil.createItem(Material.IRON_AXE, ChatColor.GRAY + "Iron Axe");
+        else if(axeLevel == 4) axeReceive = ItemUtil.createItem(Material.DIAMOND_AXE, ChatColor.GRAY + "Diamond Axe");
+        if(axeReceive != null) {
+            axeReceive.addEnchantment(Enchantment.DIG_SPEED, 1);
+            this.idealItems.put(2, axeReceive);
+        }
+
+        int shearsLevel = levelContainer.getLevels().get(BWLevelable.BWLevel.SHEARS);
+        ItemStack shearsReceive = null;
+        if(shearsLevel >= 1) shearsReceive = ItemUtil.createItem(Material.SHEARS, ChatColor.WHITE + "Permanent Shears");
+
         int armorLevel = levelContainer.getLevels().get(BWLevelable.BWLevel.ARMOR);
         ItemStack chestplate = new ItemStack(Material.LEATHER_CHESTPLATE);
         ItemStack leggings = new ItemStack(Material.LEATHER_LEGGINGS);
@@ -81,6 +110,7 @@ public class BWUserData {
         this.idealItems.put(102, chestplate);
         this.idealItems.put(101, leggings);
         this.idealItems.put(100, boots);
+        if(shearsReceive != null) this.idealItems.put(3, shearsReceive);
     }
 
     private static void staticIdealDefaults(HashMap<Integer, ItemStack> ideals) {}

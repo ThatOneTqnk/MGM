@@ -24,6 +24,7 @@ public abstract class GameInfo {
     Location spawnArea;
     List<MatchModule> modules = new ArrayList<>();
     GameType gameType;
+    // TODO move these into match container lol
     List<Player> queuedPlayers = new ArrayList<>();
     List<MatchTeam> teams = new ArrayList<>();
 
@@ -51,6 +52,7 @@ public abstract class GameInfo {
         modules.add(new CountdownModule());
     }
     public void additionalCoreParsing(JsonElement elem, World world) {
+        // TODO move this into the match container, teams shouldn't be part of GameInfo...
         JsonObject rawData = elem.getAsJsonObject();
         if(rawData.has("teams")) {
             for(JsonElement teamElement : rawData.getAsJsonArray("teams")) {
