@@ -60,7 +60,7 @@ public class MatchRuntimeManager {
         World world = worldCreator.createWorld();
         world.setAutoSave(false);
         ManageWorld.setDefaultRules(world);
-        Match product = new Match(matchUuid, world, library.getMapContainerByName(mapName), new BedwarsInfo(null));
+        Match product = new Match(matchUuid, world, library.getMapContainerByName(mapName));
         product.initWorldDependentContent();
         product.load();
         return product;

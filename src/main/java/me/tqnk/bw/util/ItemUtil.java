@@ -1,5 +1,8 @@
 package me.tqnk.bw.util;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -8,6 +11,7 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.potion.Potion;
 import org.bukkit.potion.PotionType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -50,6 +54,22 @@ public class ItemUtil {
                 break;
         }
         return null;
+    }
+
+    public static ItemStack createItem(JsonObject container) {
+        Material medium = Material.valueOf(getTechnicalName(container.get("item").getAsString()));
+        ItemStack item = new ItemStack(medium);
+        if(container.has("count")) item.setAmount(container.get("count").getAsInt());
+        ItemMeta meta = item.getItemMeta();
+        if(container.has("display")) meta.setDisplayName(container.get("display").getAsString());
+        if(container.has("lore")) {
+            JsonArray rawLores = container.get("lore").getAsJsonArray();
+            List<String> lores = new ArrayList<>();
+            for(JsonElement elem : rawLores) lores.add(elem.getAsString());
+            meta.setLore(lores);
+        }
+        item.setItemMeta(meta);
+        return item;
     }
 
     public static ItemStack createItem(Material material) {
@@ -139,6 +159,10 @@ public class ItemUtil {
         ItemMeta meta = stack.getItemMeta();
         meta.setUnbreakable(true);
         stack.setItemMeta(meta);
+    }
+
+    public static String getTechnicalName(String inItem) {
+        return inItem.toUpperCase().replaceAll(" ", "_");
     }
 
 }

@@ -1,0 +1,39 @@
+{
+	"match_configs": [
+		{
+			"id": "classic",
+			"gametype": "bedwars",
+			"default": true,
+			"body": {
+				"shop": {
+					"title": "&6Shop!",
+					"categories": [
+						{"item": "nether star", "display": "&eQuick Buy", "lore": ["&eBuy common items &7here"]},
+						{"item": "hard clay", "display": "&eBuilding blocks", "lore": ["&7Buy &ablocks &7here"]},
+						{"item": "gold sword", "display": "&eWeaponry", "lore": ["&7Purchase &aweapons &7here"]},
+						{"item": "chainmail boots", "display": "&eArmor", "lore": ["&7Purchase &earmor &7here"]},
+						{"item": "stone pickaxe", "display": "&eTools", "lore": ["&eTools &7can be found here"]},
+						{"item": "bow", "display": "&eProjectiles", "lore": ["&7For your &elong range &7needs"]},
+						{"item": "brewing stand item", "display": "&ePotions", "lore": ["&ePotions &7are nice"]},
+						{"item": "tnt", "display": "&eSpecial Items", "lore": ["&eSpecial items, &7quite cool"]},
+						{"item": "diamond", "display": "&eTeam Upgrades", "lore": ["&eUpgrades for your team!"]}
+					],
+					"shopitems": [
+						{
+							"item": {"item": "wool", "display": "&eWool", "count": 16},
+							"costtype": {"item": "iron ingot", "count": 4},
+							"resides": [
+								{"category": 1, "slot": 1}
+							]
+						},
+						{
+							"item": {"item": "stone sword", "display": "&7Stone Sword"},
+							"costtype": {"item": "iron ingot"}
+						}
+					]
+				}
+			}
+		},
+		{}
+	]
+}

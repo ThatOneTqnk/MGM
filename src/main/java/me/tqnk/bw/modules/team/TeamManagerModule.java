@@ -25,8 +25,8 @@ public class TeamManagerModule extends MatchModule {
 
     @Override
     public void load(Match match) {
-        // allTeams reference links to BedwarsInfo
-        allTeams = match.getMatchInfo().getTeams();
+        // allTeams reference links to MatchTeam List in Match
+        allTeams = match.getTeams();
         this.match = match;
         sbManager = match.getModule(ScoreboardManagerModule.class);
         playerManager = MGM.get().getPlayerManager();
@@ -34,7 +34,7 @@ public class TeamManagerModule extends MatchModule {
     }
 
     private void parseAndRegisterTeams() {
-        for(MatchTeam team : match.getMatchInfo().getTeams()) registerTeam(team);
+        for(MatchTeam team : allTeams) registerTeam(team);
     }
 
     public void registerTeam(MatchTeam team) {

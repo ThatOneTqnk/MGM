@@ -1,17 +1,25 @@
 package me.tqnk.bw.match;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import lombok.Getter;
 import lombok.Setter;
 import me.tqnk.bw.MGM;
 import me.tqnk.bw.game.GameInfo;
+import me.tqnk.bw.game.GameType;
 import me.tqnk.bw.game.MatchModule;
 import me.tqnk.bw.map.MapContainer;
+import me.tqnk.bw.modules.team.MatchTeam;
 import me.tqnk.bw.status.GameStatus;
 import me.tqnk.bw.util.Parser;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -23,16 +31,63 @@ public class Match {
     private MapContainer map;
     private GameInfo matchInfo;
     @Setter private GameStatus status;
+    private List<MatchTeam> teams;
+    private List<Player> queuedPlayers;
+    private Location spawnArea;
 
-    public Match(UUID identity, World hostWorld, MapContainer map, GameInfo matchInfo) {
+    public Match(UUID identity, World hostWorld, MapContainer map) {
         this.identity = identity;
         this.hostWorld = hostWorld;
         this.map = map;
-        this.matchInfo = matchInfo;
         this.status = GameStatus.PRE;
-        matchInfo.additionalCoreParsing(map.getMetadata().getRawJson(), hostWorld);
-        matchInfo.registerCoreModules();
-        matchInfo.registerModules();
+        this.teams = new ArrayList<>();
+        this.queuedPlayers = new ArrayList<>();
+        loadMatchJson();
+        determineGameType();
+        this.matchInfo.registerCoreModules();
+        this.matchInfo.registerModules();
+    }
+
+    private void determineGameType() {
+        JsonObject rawData = map.getMetadata().getRawJson().getAsJsonObject();
+        GameType valid = null;
+        if(rawData.has("game")) {
+            JsonObject rawDataGame = rawData.get("game").getAsJsonObject();
+            if(rawDataGame.has("gametype")) {
+                String cand = rawDataGame.get("gametype").getAsString();
+                for(GameType gameType : GameType.values()) {
+                    if(gameType.getTechnicalName().equalsIgnoreCase(cand)) {
+                        valid = gameType;
+                        break;
+                    }
+                }
+            }
+        }
+        // default to bedwars for now
+        if(valid == null) {
+            valid = GameType.BEDWARS;
+            Bukkit.getLogger().info("No gametype was declared, defaulted to BEDWARS");
+        }
+        try {
+            this.matchInfo = ((GameInfo) valid.getHostClass().getConstructors()[0].newInstance());
+        } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Loads Match scope JSON
+    private void loadMatchJson() {
+        JsonObject rawData = map.getMetadata().getRawJson().getAsJsonObject();
+        if(rawData.has("teams")) {
+            for(JsonElement teamElement : rawData.getAsJsonArray("teams")) {
+                JsonObject teamJson = teamElement.getAsJsonObject();
+                String teamId = teamJson.get("id").getAsString();
+                String teamDisplayName = teamJson.get("name").getAsString();
+                ChatColor teamChatColor = ChatColor.valueOf(teamJson.get("color").getAsString().toUpperCase().replace(" ", "_"));
+                Location teamSpawnArea = Parser.convertLocation(hostWorld, teamJson.get("spawnarea"));
+                teams.add(new MatchTeam(teamChatColor, teamSpawnArea, teamDisplayName, teamId));
+            }
+        }
     }
 
     public void load() {
@@ -59,11 +114,16 @@ public class Match {
 
         Bukkit.getLogger().info("Loaded " + this.getMatchInfo().getModules().size() + " modules (" + listenerCount + " listeners)");
     }
+
+    public void end() {
+        this.status = GameStatus.POST;
+    }
+
     public void unload() {
 
     }
     public void initWorldDependentContent() {
-        matchInfo.setSpawnArea(Parser.convertLocation(hostWorld, map.getMetadata().getRawJson().getAsJsonObject().get("spawnarea")));
+        this.spawnArea = Parser.convertLocation(hostWorld, map.getMetadata().getRawJson().getAsJsonObject().get("spawnarea"));
     }
 
     @SuppressWarnings("unchecked")

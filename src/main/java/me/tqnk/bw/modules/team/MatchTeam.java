@@ -21,7 +21,7 @@ public class MatchTeam {
         players = new ArrayList<>();
         this.chatTeamColor = chatTeamColor;
         this.spawnArea = spawnArea;
-        this.displayName = displayName;
+        this.displayName = ChatColor.translateAlternateColorCodes('&', displayName);
         this.teamID = teamID;
     }
     public void add(Player p) {

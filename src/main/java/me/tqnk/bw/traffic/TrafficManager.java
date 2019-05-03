@@ -85,14 +85,14 @@ public class TrafficManager implements Listener {
 
     private static void addPlayerToQueue(Match match, Player target) {
         MGM.get().getPlayerManager().getPlayerContext(target).setInGame(match);
-        match.getMatchInfo().addPlayerToQueue(target);
-        target.teleport(match.getMatchInfo().getSpawnArea(), PlayerTeleportEvent.TeleportCause.PLUGIN);
+        match.getQueuedPlayers().add(target);
+        target.teleport(match.getSpawnArea(), PlayerTeleportEvent.TeleportCause.PLUGIN);
         PlayerUtil.generalReadyPlayer(target, GameMode.ADVENTURE);
         pingQueueCountdown(match);
     }
 
     private static void pingQueueCountdown(Match match) {
-        if(match.getMatchInfo().getQueuedPlayers().size() >= match.getMatchInfo().getMinQueued() && match.getStatus() == GameStatus.PRE) {
+        if(match.getQueuedPlayers().size() >= match.getMatchInfo().getMinQueued() && match.getStatus() == GameStatus.PRE) {
             match.setStatus(GameStatus.QUEUE);
             match.getModule(CountdownModule.class).setupTimer();
         }
@@ -104,7 +104,7 @@ public class TrafficManager implements Listener {
         Match candidate = null;
         for(Match match : matches) {
             if(match == null) continue;
-            int matchQueueSize = match.getMatchInfo().getQueuedPlayers().size();
+            int matchQueueSize = match.getQueuedPlayers().size();
             if(matchQueueSize > highest && (match.getStatus() == GameStatus.PRE || match.getStatus() == GameStatus.QUEUE) && match.getMatchInfo().getGameType() == gameType) {
                 highest = matchQueueSize;
                 candidate = match;

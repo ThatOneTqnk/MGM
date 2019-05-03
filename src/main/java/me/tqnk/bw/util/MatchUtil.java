@@ -7,15 +7,15 @@ import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 
 public class MatchUtil {
-    public static void sendToQueued(Match match, String msg) {
-        for(Player player : match.getMatchInfo().getQueuedPlayers()) {
+    public static void sendToQueued(Match match, String msg, boolean includeSpectators) {
+        for(Player player : match.getQueuedPlayers()) {
             if(player.isOnline()) {
                 player.sendMessage(msg);
             }
         }
     }
-    public static void sendToQueued(Match match, String[] msg) {
-        for(Player player : match.getMatchInfo().getQueuedPlayers()) {
+    public static void sendToQueued(Match match, String[] msg, boolean includeSpectators) {
+        for(Player player : match.getQueuedPlayers()) {
             if(player.isOnline()) {
                 player.sendMessage(msg);
             }
@@ -23,7 +23,7 @@ public class MatchUtil {
     }
 
     public static void playToQueued(Match match, Sound sound, float pitch) {
-        for(Player player : match.getMatchInfo().getQueuedPlayers()) {
+        for(Player player : match.getQueuedPlayers()) {
             if(player.isOnline()) {
                 player.playSound(player.getLocation().clone().add(0.0, 100.0, 0.0), sound, 1000, pitch);
             }
@@ -35,7 +35,7 @@ public class MatchUtil {
     }
 
     public static void removeFromAll(PlayerContext p) {
-        if(p.getInGame() != null) p.getInGame().getMatchInfo().getQueuedPlayers().remove(p.getHost());
+        if(p.getInGame() != null) p.getInGame().getQueuedPlayers().remove(p.getHost());
         p.setInTeam(null);
         p.setInGame(null);
     }

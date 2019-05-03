@@ -13,6 +13,6 @@ public class MapInfoDeserializer implements JsonDeserializer<MapInfo> {
         String name = rawData.get("name").getAsString();
         List<String> authors = new ArrayList<>();
         for(JsonElement authorJson : rawData.getAsJsonArray("authors")) authors.add(authorJson.getAsString());
-        return new MapInfo(name, authors, null, jsonElement);
+        return new MapInfo(name, authors, jsonElement);
     }
 }

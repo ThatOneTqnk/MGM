@@ -2,6 +2,7 @@ package me.tqnk.bw.util;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import org.apache.commons.lang.math.Fraction;
 import org.bukkit.Location;
 import org.bukkit.World;
 
@@ -42,5 +43,9 @@ public class Parser {
 
             return new Location(world, x, y, z, yaw, pitch);
         }
+    }
+
+    public static double parseFraction(String ratio) {
+        return Fraction.getFraction(ratio).doubleValue();
     }
 }

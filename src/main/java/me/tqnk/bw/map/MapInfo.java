@@ -12,6 +12,5 @@ import java.util.List;
 public class MapInfo {
     private String name;
     private List<String> authors;
-    @Setter private Location spawnArea;
     private JsonElement rawJson;
 }

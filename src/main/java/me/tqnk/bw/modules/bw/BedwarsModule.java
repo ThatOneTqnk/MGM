@@ -3,11 +3,13 @@ package me.tqnk.bw.modules.bw;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import me.tqnk.bw.MGM;
+import me.tqnk.bw.events.MGMDeathEvent;
 import me.tqnk.bw.events.MatchQuitEvent;
 import me.tqnk.bw.game.GameType;
 import me.tqnk.bw.game.MatchModule;
 import me.tqnk.bw.match.Match;
 import me.tqnk.bw.modules.bw.generator.BWGenerator;
+import me.tqnk.bw.modules.death.DeathMessageRegister;
 import me.tqnk.bw.modules.periodical.Periodical;
 import me.tqnk.bw.modules.scoreboard.ScoreboardManagerModule;
 import me.tqnk.bw.modules.team.MatchTeam;
@@ -28,6 +30,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.inventory.CraftItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
@@ -61,9 +64,25 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
     private List<BWGenerator> generators = new ArrayList<>();
     private String shopName = ChatColor.GOLD + "Shop";
 
+    // Death
+    private static List<DeathMessageRegister> deathMessages = Arrays.asList(
+            new DeathMessageRegister(EntityDamageEvent.DamageCause.PROJECTILE,
+                    Arrays.asList("%k picked %v off with a sharp arrow", "%v was sniped effortlessly by %k"),
+                    true),
+            new DeathMessageRegister(EntityDamageEvent.DamageCause.VOID,
+                    Arrays.asList("%v couldn't resist the force known as gravity", "%v missed the pool of water"),
+                    false),
+            new DeathMessageRegister(EntityDamageEvent.DamageCause.VOID, Arrays.asList("%v chose the void over challenging %k"), true),
+            new DeathMessageRegister(EntityDamageEvent.DamageCause.FIRE, Arrays.asList("%v was dissed to a crisp by lil wyan't"), false)
+    );
+
+    // etc
+    private Random randomGen;
+
     @Override
     public void load(Match match) {
         this.match = match;
+        this.randomGen = new Random();
         this.playerManager = MGM.get().getPlayerManager();
         scoreboardManagerModule = match.getModule(ScoreboardManagerModule.class);
         teamManagerModule = match.getModule(TeamManagerModule.class);
@@ -86,12 +105,27 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
     }
 
     private void pingTeams() {
+        int counter = 0;
         for(Map.Entry<MatchTeam, BWTeamInfo> entry : teamInfoLink.entrySet()) {
             if(entry.getValue().getBwTeamStatus() == BWTeamStatus.NORESPAWN && entry.getKey().getPlayers().size() == 0) {
-                MatchUtil.sendToQueued(this.match, new String[] {"", ChatColor.WHITE + "" + ChatColor.BOLD + entry.getKey().getChatTeamColor() + "" + entry.getKey().getDisplayName() + ChatColor.RESET + "" + ChatColor.WHITE + " team has been eliminated!", ""});
+                MatchUtil.sendToQueued(this.match, new String[] {"", ChatColor.WHITE + "" + ChatColor.BOLD + entry.getKey().getChatTeamColor() + "" + entry.getKey().getDisplayName() + ChatColor.RESET + "" + ChatColor.WHITE + " team has been eliminated!", ""}, true);
                 entry.getValue().setBwTeamStatus(BWTeamStatus.DEAD);
             }
+            if(entry.getValue().getBwTeamStatus() == BWTeamStatus.DEAD) counter++;
         }
+        if(counter >= teamInfoLink.size() - 1) endGame();
+    }
+
+    private void endGame() {
+        MatchTeam winner = null;
+        for(Map.Entry<MatchTeam, BWTeamInfo> entry : teamInfoLink.entrySet()) {
+            if(entry.getValue().getBwTeamStatus().getAliveOrder() > 0) {
+                winner = entry.getKey();
+                break;
+            }
+        }
+        if(winner == null) return;
+        Bukkit.broadcastMessage(winner.getDisplayName() + ChatColor.GRAY + " won the game!");
     }
 
     private void parseRemainderJson(JsonElement elem, World world) {
@@ -107,11 +141,22 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
             for(JsonElement loc : rawData.getAsJsonArray("shops")) shopVillagerLocs.add(Parser.convertLocation(world, loc));
         }
         if(rawData.has("generators")) {
+            int counter = 0;
             for(JsonElement gen : rawData.getAsJsonArray("generators")) {
+                // generator JSON will contain genType, genLoc, and genRate
                 JsonObject genData = gen.getAsJsonObject();
+                counter++;
+                if(!(genData.has("type") && genData.has("location") && genData.has("rate"))) {
+                    Bukkit.getLogger().info("Missing generator information for generator " + counter);
+                    Bukkit.getLogger().info("Required fields: type, location, rate");
+                    continue;
+                }
                 String genType = genData.get("type").getAsString();
                 JsonElement genLoc = genData.get("location");
-                generators.add(new BWGenerator(BWGenerator.BWGenType.valueOf(genType.toUpperCase()), Parser.convertLocation(world, genLoc)));
+                int genRate = genData.get("rate").getAsInt();
+                // default to 100 ticks
+                if(genRate <= 0) genRate = 100;
+                generators.add(new BWGenerator(new ItemStack(Material.valueOf(ItemUtil.getTechnicalName(genType))), Parser.convertLocation(world, genLoc), genRate));
             }
         }
     }
@@ -275,8 +320,8 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
     @Override
     public void start() {
         TeamManagerModule teamManagerModule = match.getModule(TeamManagerModule.class);
-        teamManagerModule.distributePlayersToTeams(match.getMatchInfo().getQueuedPlayers());
-        for(Player p : match.getMatchInfo().getQueuedPlayers()) {
+        teamManagerModule.distributePlayersToTeams(match.getQueuedPlayers());
+        for(Player p : match.getQueuedPlayers()) {
             p.sendMessage(ChatColor.GOLD + "Bedwars " + ChatColor.GRAY + "has started!");
             bwUserData.add(new BWUserData(p, 0, ItemUtil.translateChatColorToColor(playerManager.getPlayerContext(p).getInTeam().getChatTeamColor())));
             p.setScoreboard(scoreboardManagerModule.getNewSB());
@@ -286,7 +331,7 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
             BWTeamStatus status = (team.getPlayers().size() > 0) ? BWTeamStatus.ALIVE : BWTeamStatus.DEAD;
             teamInfoLink.get(team).setBwTeamStatus(status);
         }
-        for(Player p : match.getMatchInfo().getQueuedPlayers()) {
+        for(Player p : match.getQueuedPlayers()) {
             PlayerUtil.generalReadyPlayer(p, GameMode.SURVIVAL);
             sendHowToPlay(p);
             BWUserData.applyIdealItems(getBWUserDataByPlayer(p));
@@ -304,11 +349,38 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
     }
 
     @EventHandler
+    public void onMGMDeath(MGMDeathEvent event) {
+        if(!MatchUtil.determineMatchCorrespondence(event.getHost(), this.match)) return;
+        DeathMessageRegister found = null;
+        boolean needKiller = (event.getInfo().getKiller() != null);
+        for(DeathMessageRegister dm : deathMessages) if(dm.getCause() == event.getInfo().getCause() && (dm.isHasKiller() == needKiller)) found = dm;
+        String deathMsg;
+
+        if(found == null) deathMsg = (needKiller ? "%k slayed their opponent, %v" : "%v went to the graveyard alone");
+        else deathMsg = found.getDeathMessages().get(randomGen.nextInt(found.getDeathMessages().size()));
+
+        if(deathMsg == null) return;
+        ChatColor vColor = playerManager.getPlayerContext(event.getHost()).getInTeam().getChatTeamColor();
+        String vMsg = event.getHost().getName();
+        if(vColor != null) vMsg = vColor + vMsg;
+        deathMsg = ChatColor.GRAY + deathMsg;
+        deathMsg = deathMsg.replaceAll("%v", vMsg + ChatColor.GRAY);
+        if(needKiller) {
+            ChatColor kColor = playerManager.getPlayerContext(event.getInfo().getKiller().getHost()).getInTeam().getChatTeamColor();
+            String kMsg = event.getInfo().getKiller().getHost().getName();
+            if(kColor != null) kMsg = kColor + kMsg;
+            deathMsg = deathMsg.replaceAll("%k", kMsg + ChatColor.GRAY);
+        }
+        MatchUtil.sendToQueued(this.match, deathMsg, true);
+        onMatchQuit(new MatchQuitEvent(playerManager.getPlayerContext(event.getHost())));
+    }
+
+    @EventHandler
     public void onRespawn(PlayerRespawnEvent event) {
         Player p = event.getPlayer();
         if(!MatchUtil.determineMatchCorrespondence(p, this.match)) return;
 
-        event.setRespawnLocation(match.getMatchInfo().getSpawnArea());
+        event.setRespawnLocation(match.getSpawnArea());
         p.setGameMode(GameMode.SPECTATOR);
         if(!(match.getStatus() == GameStatus.MID)) return;
         if(playerManager.getPlayerContext(p).getInTeam() != null) {
@@ -333,11 +405,7 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
         if(teamInfo == null || ctx == null || ctx.getInTeam() == null || teamInfo.getBwTeamStatus().getAliveOrder() <= 1) return;
         MatchTeam coolerTeam = ctx.getInTeam();
         String brokeBed = ChatColor.WHITE.toString() + ChatColor.BOLD + "> " + coolerTeam.getChatTeamColor() + p.getName() + ChatColor.GRAY + " destroyed " + team.getChatTeamColor() + team.getDisplayName() + ChatColor.GRAY + "'s bed!";
-        for(Player playa : match.getMatchInfo().getQueuedPlayers()) {
-            playa.sendMessage("");
-            playa.sendMessage(brokeBed);
-            playa.sendMessage("");
-        }
+        MatchUtil.sendToQueued(this.match, new String[] {"", brokeBed, ""}, true);
         MatchUtil.playToQueued(match, Sound.ENTITY_ENDERDRAGON_GROWL, 1F);
         teamInfo.setBwTeamStatus(BWTeamStatus.NORESPAWN);
     }
@@ -397,12 +465,23 @@ public class BedwarsModule extends MatchModule implements Listener, Periodical {
 
     @Override
     public void tick() {
-        for(BWUserData userData : bwUserData) {
-            int resp = userData.getRespawnTimer();
-            if(resp > 0) {
-                if (resp % 20 == 0) respawnCountdown(userData.getPlayer(), resp);
-                userData.setRespawnTimer(resp + 1);
-                if (resp >= 100) sendPlayerToBase(userData.getPlayer());
+        // handle respawn timers
+        if(match.getStatus() == GameStatus.MID) {
+            for(BWUserData userData : bwUserData) {
+                int resp = userData.getRespawnTimer();
+                if(resp > 0) {
+                    if (resp % 20 == 0) respawnCountdown(userData.getPlayer(), resp);
+                    userData.setRespawnTimer(resp + 1);
+                    if (resp >= 100) sendPlayerToBase(userData.getPlayer());
+                }
+            }
+            for(BWGenerator gen : generators) {
+                if(gen.getCurrent() > 0) gen.decrementCurrent();
+                else {
+                    gen.setCurrent(gen.getRate());
+//                    if(gen.getArea())
+                    this.match.getHostWorld().dropItem(gen.getArea(), gen.getGenItem());
+                }
             }
         }
     }

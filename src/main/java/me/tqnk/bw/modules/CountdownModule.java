@@ -33,11 +33,11 @@ public class CountdownModule extends MatchModule implements Periodical {
 
     private void broadcastSecond() {
         if(time > 0) {
-            MatchUtil.sendToQueued(this.match, ChatColor.GREEN + "Match " + ChatColor.GRAY + "starting in " + ChatColor.GOLD.toString() + (time / 20) + ChatColor.YELLOW.toString() + " second" + ((time > 20) ? "s" : "") + "!");
+            MatchUtil.sendToQueued(this.match, ChatColor.GREEN + "Match " + ChatColor.GRAY + "starting in " + ChatColor.GOLD.toString() + (time / 20) + ChatColor.YELLOW.toString() + " second" + ((time > 20) ? "s" : "") + "!", false);
             if(time <= 100) {
                 ChatColor[] colorFade = {ChatColor.RED, ChatColor.AQUA, ChatColor.YELLOW, ChatColor.GOLD, ChatColor.GREEN};
                 int index = (time / 20) - 1;
-                if(index >= 0) for(Player p : this.match.getMatchInfo().getQueuedPlayers()) p.sendTitle("", colorFade[index] + "" + (index + 1), 2, 15, 2);
+                if(index >= 0) for(Player p : this.match.getQueuedPlayers()) p.sendTitle("", colorFade[index] + "" + (index + 1), 2, 15, 2);
             }
             MatchUtil.playToQueued(this.match, Sound.BLOCK_NOTE_HAT, 1F);
         } else {

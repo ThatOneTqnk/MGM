@@ -6,10 +6,12 @@ import me.tqnk.bw.events.MatchQueueRequestEvent;
 import me.tqnk.bw.game.GameType;
 import me.tqnk.bw.match.Match;
 import me.tqnk.bw.permissions.RankData;
+import me.tqnk.bw.status.GameStatus;
 import me.tqnk.bw.user.PlayerManager;
 import org.apache.commons.lang.math.NumberUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerTeleportEvent;
@@ -66,19 +68,22 @@ public class BwCommand extends CommandModel {
         int argCount = args.length;
         String firstRealArg = args[1];
         if(firstRealArg.equalsIgnoreCase("tp") || firstRealArg.equalsIgnoreCase("teleport")) {
-            if(argCount >= 3) {
+            if (argCount >= 3) {
                 int ID = checkIfValidID(args[2]);
-                if(ID < 0) {
+                if (ID < 0) {
                     target.sendMessage(ChatColor.RED + "Invalid ID.");
                     return;
                 }
                 Match candidate = MGM.get().getMatchRuntimeManager().getMatchById(ID);
-                if(candidate == null) {
+                if (candidate == null) {
                     target.sendMessage(ChatColor.RED + "An error occurred.");
                 } else {
-                    target.teleport(candidate.getMatchInfo().getSpawnArea(), PlayerTeleportEvent.TeleportCause.PLUGIN);
+                    target.teleport(candidate.getSpawnArea(), PlayerTeleportEvent.TeleportCause.PLUGIN);
                 }
             } else target.sendMessage(usages.get(0).getCommand());
+        } else if(firstRealArg.equalsIgnoreCase("here")) {
+            World juice = target.getWorld();
+            target.sendMessage(ChatColor.YELLOW + " u r in world " + juice.getName());
         } else if(firstRealArg.equalsIgnoreCase("info")) {
             int ID = checkIfValidID(args[2]);
             if(ID < 0) {
@@ -91,7 +96,7 @@ public class BwCommand extends CommandModel {
             } else {
                 target.sendMessage(ChatColor.YELLOW + "Match UUID " + ChatColor.DARK_GRAY + "- " + ChatColor.GRAY + candidate.getIdentity().toString());
                 target.sendMessage(ChatColor.YELLOW + "Match World " + ChatColor.DARK_GRAY + "- " + ChatColor.GRAY + candidate.getHostWorld());
-                target.sendMessage(ChatColor.YELLOW + "Match Spawn Area " + ChatColor.DARK_GRAY + "- " + ChatColor.GRAY + candidate.getMatchInfo().getSpawnArea());
+                target.sendMessage(ChatColor.YELLOW + "Match Spawn Area " + ChatColor.DARK_GRAY + "- " + ChatColor.GRAY + candidate.getSpawnArea());
             }
         } else if(firstRealArg.equalsIgnoreCase("queuelist")) {
             int ID = checkIfValidID(args[2]);
@@ -105,7 +110,7 @@ public class BwCommand extends CommandModel {
             } else {
                 target.sendMessage(ChatColor.GOLD + "Players in Match " + ChatColor.YELLOW + ID);
                 String allPlayers = "";
-                for(Player person : candidate.getMatchInfo().getQueuedPlayers()) allPlayers = allPlayers + person.getDisplayName() + " ";
+                for(Player person : candidate.getQueuedPlayers()) allPlayers = allPlayers + person.getDisplayName() + " ";
                 target.sendMessage(allPlayers);
             }
         } else if(firstRealArg.equalsIgnoreCase("ingamelist")) {
@@ -114,6 +119,30 @@ public class BwCommand extends CommandModel {
             for(Player player : Bukkit.getOnlinePlayers()) if(playerManager.getPlayerContext(player).getInGame() != null) inGame = inGame + player.getDisplayName() + " ";
             target.sendMessage(ChatColor.GREEN + "People in any sort of game:");
             target.sendMessage(inGame);
+        } else if(firstRealArg.equalsIgnoreCase("setstate")) {
+            if(args.length < 4) {
+                target.sendMessage(ChatColor.RED + "bad setstate");
+                return;
+            }
+            int ID = checkIfValidID(args[2]);
+            if(ID < 0) {
+                target.sendMessage(ChatColor.RED + "Invalid ID.");
+                return;
+            }
+            Match candidate = MGM.get().getMatchRuntimeManager().getMatchById(ID);
+            if(candidate == null) {
+                target.sendMessage(ChatColor.RED + "An error occurred.");
+            } else {
+                GameStatus setStatus;
+                try {
+                    setStatus = GameStatus.valueOf(args[3].toUpperCase());
+                } catch(IllegalArgumentException e) {
+                    target.sendMessage(ChatColor.RED + "Invalid state: " + args[3]);
+                    return;
+                }
+                candidate.setStatus(setStatus);
+                target.sendMessage(ChatColor.GRAY + "Set game status for " + ChatColor.YELLOW + " Match " + ChatColor.GOLD.toString() + ID + ChatColor.GRAY.toString() + " to " + ChatColor.GREEN.toString() + args[3].toUpperCase());
+            }
         }
     }
 
@@ -126,14 +155,5 @@ public class BwCommand extends CommandModel {
             return -1;
         }
         return (x < 1 || x > MGM.get().getMatchRuntimeManager().getAllMatches().size()) ? -1 : x;
-    }
-
-    class CommandPerm {
-        @Getter private String command;
-        @Getter private RankData requirement;
-        CommandPerm(String command, RankData requirement) {
-            this.command = command;
-            this.requirement = requirement;
-        }
     }
 }
